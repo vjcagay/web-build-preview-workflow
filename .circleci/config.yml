@@ -9,13 +9,15 @@ jobs:
     steps:
       - checkout
       - aws-cli/setup
-      - run: >-
-          # Build app
-          mkdir build
-          cp -a ./src/. ./build
-          
-          # Upload to S3 in a folder named with the current branch
-          aws s3 sync ./build s3://web-build-preview-workflow --delete
+      - run:
+          name: Build app and sync
+          command: |
+            # Build app
+            mkdir build
+            cp -a ./src/. ./build
+            
+            # Upload to S3 in a folder named with the current branch
+            aws s3 sync ./build s3://web-build-preview-workflow --delete
           
 workflows:
   deploy-main:
