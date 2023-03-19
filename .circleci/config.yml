@@ -4,9 +4,6 @@ orbs:
   aws-cli: circleci/aws-cli@3.1.4
   
 parameters:
-  branch_name:
-    type: string
-    default: ""
   github_actions_event:
     type: string
     default: ""
@@ -50,9 +47,6 @@ jobs:
             aws cloudfront create-invalidation --distribution-id E1V5I0HOA197UY --paths "/*"
   delete-preview-folder:
     executor: aws-cli/default
-    parameters:
-      branch_name:
-        type: string
     steps:
       - checkout
       - aws-cli/setup
@@ -61,15 +55,15 @@ jobs:
           command: |
             # Check if folder exists
             # index.html will always be present, so we can check for its existence
-            aws s3api head-object --bucket web-build-preview-workflow --key preview/<< parameters.branch_name >>/index.html || not_exist=true
+            aws s3api head-object --bucket web-build-preview-workflow --key preview/$CIRCLE_BRANCH/index.html || not_exist=true
             
-            if [ $not_exist ]; then
+            if [[ $not_exist ]]; then
               echo "Preview folder does not exist."
             else
-              aws s3 rm s3://web-build-preview-workflow/preview/<< parameters.branch_name >> --recursive
+              aws s3 rm s3://web-build-preview-workflow/preview/$CIRCLE_BRANCH --recursive
               
               # Invalidate CloudFront
-              aws cloudfront create-invalidation --distribution-id E1V5I0HOA197UY --paths "/preview/<< parameters.branch_name >>/*"
+              aws cloudfront create-invalidation --distribution-id E1V5I0HOA197UY --paths "/preview/$CIRCLE_BRANCH/*"
               
               echo "Preview folder has been deleted."
             fi
@@ -77,6 +71,8 @@ jobs:
           
 workflows:
   build-and-deploy:
+    when:
+      equal: [ "", << pipeline.parameters.github_actions_event >> ]
     jobs:
       - approve-build:
           type: approval
@@ -91,5 +87,4 @@ workflows:
     when:
       equal: [ "delete", << pipeline.parameters.github_actions_event >> ]
     jobs:
-      - delete-preview-folder:
-          branch_name: << pipeline.parameters.branch_name >>
+      - delete-preview-folder
