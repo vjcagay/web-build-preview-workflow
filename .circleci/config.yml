@@ -18,7 +18,8 @@ jobs:
             
             # Upload to S3 in a folder named with the current branch
             if [[ $CIRCLE_BRANCH == "main" ]]; then
-              aws s3 sync ./build s3://web-build-preview-workflow --delete --exclude "preview/"
+              aws s3 rm s3://web-build-preview-workflow --recursive --exclude "preview/"
+              aws s3 sync ./build s3://web-build-preview-workflow
             else
               aws s3 sync ./build s3://web-build-preview-workflow/preview/$CIRCLE_BRANCH --delete
             fi
