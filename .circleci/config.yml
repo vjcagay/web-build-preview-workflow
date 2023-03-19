@@ -2,7 +2,15 @@ version: 2.1
       
 orbs:
   aws-cli: circleci/aws-cli@3.1.4
-      
+  
+parameters:
+  branch_name:
+    type: string
+    default: ""
+  github_actions_event:
+    type: string
+    default: ""
+    
 jobs:
   build-app:
     executor: aws-cli/default
@@ -22,7 +30,6 @@ jobs:
     parameters:
       branch_name:
         type: string
-        default: main
     steps:
       - checkout
       - attach_workspace:
@@ -41,6 +48,32 @@ jobs:
             
             # Invalidate CloudFront
             aws cloudfront create-invalidation --distribution-id E1V5I0HOA197UY --paths "/*"
+  delete-preview-folder:
+    executor: aws-cli/default
+    parameters:
+      branch_name:
+        type: string
+    steps:
+      - checkout
+      - aws-cli/setup
+      - run:
+          name: Delete Web folder
+          command: |
+            # Check if folder exists
+            # index.html will always be present, so we can check for its existence
+            aws s3api head-object --bucket web-build-preview-workflow --key preview/<< parameters.branch_name >>/index.html || not_exist=true
+            
+            if [ $not_exist ]; then
+              echo "Preview folder does not exist."
+            else
+              aws s3 rm s3://web-build-preview-workflow/preview/<< parameters.branch_name >> --recursive
+              
+              # Invalidate CloudFront
+              aws cloudfront create-invalidation --distribution-id E1V5I0HOA197UY --paths "/preview/<< parameters.branch_name >>/*"
+              
+              echo "Preview folder has been deleted."
+            fi
+    
           
 workflows:
   build-and-deploy:
@@ -54,3 +87,9 @@ workflows:
           branch_name: $CIRCLE_BRANCH
           requires:
             - build-app
+  delete-preview:
+    when:
+      equal: [ "delete", << pipeline.parameters.github_actions_event >> ]
+    jobs:
+      - delete-preview-folder:
+          branch_name: << pipeline.parameters.branch_name >>
