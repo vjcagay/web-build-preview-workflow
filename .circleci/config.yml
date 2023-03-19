@@ -17,7 +17,14 @@ jobs:
             cp -a ./src/. ./build
             
             # Upload to S3 in a folder named with the current branch
-            aws s3 sync ./build s3://web-build-preview-workflow --delete
+            if [[ $CIRCLE_BRANCH == "main" ]]; then
+              aws s3 sync ./build s3://web-build-preview-workflow --delete --exclude "preview/"
+            else
+              aws s3 sync ./build s3://web-build-preview-workflow/preview/$CIRCLE_BRANCH --delete
+            fi
+            
+            # Invalidate CloudFront
+            aws cloudfront create-invalidation --distribution-id E1V5I0HOA197UY --paths "/*"
           
 workflows:
   deploy-main:
