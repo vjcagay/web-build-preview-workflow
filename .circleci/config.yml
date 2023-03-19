@@ -7,6 +7,9 @@ parameters:
   github_actions_event:
     type: string
     default: ""
+  preview_folder_name:
+    type: string
+    default: ""
     
 jobs:
   build-app:
@@ -24,9 +27,6 @@ jobs:
             - build
   release:
     executor: aws-cli/default
-    parameters:
-      branch_name:
-        type: string
     steps:
       - checkout
       - attach_workspace:
@@ -36,7 +36,7 @@ jobs:
           name: Release build
           command: |
             # Upload to S3 in a folder named with the current branch
-            if [[ << parameters.branch_name >> == "main" ]]; then
+            if [[ $CIRCLE_BRANCH == "main" ]]; then
               aws s3 rm s3://web-build-preview-workflow --recursive --exclude "preview/*"
               aws s3 sync ./build s3://web-build-preview-workflow
             else
@@ -51,19 +51,19 @@ jobs:
       - checkout
       - aws-cli/setup
       - run:
-          name: Delete Web folder
+          name: Delete Web preview folder
           command: |
             # Check if folder exists
             # index.html will always be present, so we can check for its existence
-            aws s3api head-object --bucket web-build-preview-workflow --key preview/$CIRCLE_BRANCH/index.html || not_exist=true
+            aws s3api head-object --bucket web-build-preview-workflow --key preview/<< pipeline.parameters.preview_folder_name >>/index.html || not_exist=true
             
             if [[ $not_exist ]]; then
               echo "Preview folder does not exist."
             else
-              aws s3 rm s3://web-build-preview-workflow/preview/$CIRCLE_BRANCH --recursive
+              aws s3 rm s3://web-build-preview-workflow/preview/<< pipeline.parameters.preview_folder_name >> --recursive
               
               # Invalidate CloudFront
-              aws cloudfront create-invalidation --distribution-id E1V5I0HOA197UY --paths "/preview/$CIRCLE_BRANCH/*"
+              aws cloudfront create-invalidation --distribution-id E1V5I0HOA197UY --paths "/preview/<< pipeline.parameters.preview_folder_name >>/*"
               
               echo "Preview folder has been deleted."
             fi
@@ -72,7 +72,7 @@ jobs:
 workflows:
   build-and-deploy:
     when:
-      equal: [ "", << pipeline.parameters.github_actions_event >> ]
+      not: << pipeline.parameters.github_actions_event >>
     jobs:
       - approve-build:
           type: approval
@@ -80,11 +80,15 @@ workflows:
           requires:
             - approve-build
       - release:
-          branch_name: $CIRCLE_BRANCH
           requires:
             - build-app
   delete-preview:
     when:
-      equal: [ "delete", << pipeline.parameters.github_actions_event >> ]
+      and:
+        - equal: [ delete, << pipeline.parameters.github_actions_event >> ] 
+        - not: 
+            matches:
+              pattern: "^main$"
+              value: << pipeline.parameters.preview_folder_name >>
     jobs:
       - delete-preview-folder
