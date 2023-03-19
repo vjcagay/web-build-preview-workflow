@@ -4,20 +4,35 @@ orbs:
   aws-cli: circleci/aws-cli@3.1.4
       
 jobs:
-  build:
+  build-app:
     executor: aws-cli/default
     steps:
       - checkout
-      - aws-cli/setup
       - run:
-          name: Build app and sync
+          name: Build app
           command: |
-            # Build app
             mkdir build
             cp -a ./src/. ./build
-            
+      - persist_to_workspace:
+          root: .
+          paths:
+            - build
+  release:
+    executor: aws-cli/default
+    parameters:
+      branch_name:
+        type: string
+        default: main
+    steps:
+      - checkout
+      - attach_workspace:
+          at: .
+      - aws-cli/setup
+      - run:
+          name: Release build
+          command: |
             # Upload to S3 in a folder named with the current branch
-            if [[ $CIRCLE_BRANCH == "main" ]]; then
+            if [[ << parameters.branch_name >> == "main" ]]; then
               aws s3 rm s3://web-build-preview-workflow --recursive --exclude "preview/*"
               aws s3 sync ./build s3://web-build-preview-workflow
             else
@@ -28,10 +43,14 @@ jobs:
             aws cloudfront create-invalidation --distribution-id E1V5I0HOA197UY --paths "/*"
           
 workflows:
-  deploy-main:
+  build-and-deploy:
     jobs:
       - approve-build:
           type: approval
-      - build:
+      - build-app:
           requires:
             - approve-build
+      - release:
+          branch_name: $CIRCLE_BRANCH
+          requires:
+            - build-app
