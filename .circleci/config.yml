@@ -1,0 +1,27 @@
+version: 2.1
+      
+orbs:
+  aws-cli: circleci/aws-cli@3.1.4
+      
+jobs:
+  build:
+    executor: aws-cli/default
+    steps:
+      - checkout
+      - aws-cli/setup
+      - run: >-
+          # Build app
+          mkdir build
+          cp -a ./src/. ./build
+          
+          # Upload to S3 in a folder named with the current branch
+          aws s3 sync ./build s3://web-build-preview-workflow --delete
+          
+workflows:
+  deploy-main:
+    jobs:
+      - approve-build:
+          type: approval
+      - build:
+          requires:
+            - approve-build
